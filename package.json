@@ -7,8 +7,12 @@
   "scripts": {
     "postinstall": "patch-package"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "masa",
+    "soulnames",
+    "testnet"
+  ],
+  "author": "https://t.me/cryptolbs",
   "license": "ISC",
   "dependencies": {
     "@masa-finance/masa-sdk": "^0.5.3",
