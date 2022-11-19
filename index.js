@@ -25,7 +25,7 @@ async function calcAccountsAmount() {
     let balance = await provider.getBalance(mainWallet.address);
     console.log(`Main account balance: ${ethers.utils.formatUnits(balance)} gETH`);
 
-    return Math.floor(ethers.utils.formatUnits(balance) * 0.95 / config.ethPerWallet)
+    return Math.floor(ethers.utils.formatUnits(balance) * 0.9 / config.ethPerWallet)
 }
 
 async function disperse(walletsArray) {
@@ -96,7 +96,7 @@ async function transferEthToMainWallet(pk) {
                 to: mainWallet.address,
                 value: amountToSend,
                 gasLimit: 21000
-            }).catch(err => console.log(`Transfer failed: ${err.message}`))
+            }).catch(err => console.log(`Transfer failed`))
 
             if (tx) {
                 console.log(`Tx sent: https://goerli.etherscan.io/tx/${tx.hash}`);
