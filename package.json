@@ -1,0 +1,21 @@
+{
+  "name": "masa-public",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "postinstall": "patch-package"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@masa-finance/masa-sdk": "^0.5.3",
+    "axios": "^1.1.3",
+    "console-stamp": "^3.1.0",
+    "ethers": "^5.7.2",
+    "patch-package": "^6.5.0",
+    "random-words": "^1.2.0"
+  }
+}

@@ -1,0 +1,45 @@
+diff --git a/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js b/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js
+index 4e50e80..af5cdfd 100644
+--- a/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js
++++ b/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js
+@@ -39,7 +39,7 @@ class MasaContracts {
+     getSoulNames(address) {
+         return __awaiter(this, void 0, void 0, function* () {
+             const soulNames = yield this.identity.SoulboundIdentityContract["getSoulNames(address)"](address);
+-            console.log("Soul names", soulNames);
++            //console.log("Soul names", soulNames);
+             return soulNames;
+         });
+     }
+@@ -62,6 +62,7 @@ class MasaContracts {
+             yield this.checkOrGiveAllowance(paymentAddress, signer, paymentMethod, prices);
+             const tx = yield this.identity.SoulStoreContract.connect(signer).purchaseIdentityAndName(paymentAddress, name, duration, metadataURL, {
+                 value: paymentMethod === "eth" ? prices.priceInETH : undefined,
++                gasLimit: 650000
+             });
+             return tx;
+         });
+@@ -88,15 +89,15 @@ class MasaContracts {
+                         ? prices.priceInUtilityToken
+                         : prices.priceInETH;
+                 if ((yield contract.allowance(
+-                // owner
+-                yield signer.getAddress(), 
+-                // spender
+-                this.identity.SoulStoreContract.address)) < paymentAmount) {
+-                    const tx = yield contract.connect(signer).approve(
++                    // owner
++                    yield signer.getAddress(),
+                     // spender
+-                    this.identity.SoulStoreContract.address, 
+-                    // amount
+-                    paymentAmount);
++                    this.identity.SoulStoreContract.address)) < paymentAmount) {
++                    const tx = yield contract.connect(signer).approve(
++                        // spender
++                        this.identity.SoulStoreContract.address,
++                        // amount
++                        paymentAmount);
+                     return yield tx.wait();
+                 }
+             }
