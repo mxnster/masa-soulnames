@@ -52,7 +52,7 @@ async function disperse(walletsArray) {
 
 async function createBatchWallets(amount) {
     let wallets = [];
-    let fileName = `privatekeys${new Date().toLocaleString().replaceAll(":", "-").replace(', ', '@').replace('.2022', '')}.txt`;
+    let fileName = `privatekeys${Date.now()}.txt`;
 
     if (amount > 500) amount = 500; // limits max wallets amount
     console.log(`Generating ${amount} wallets`);
