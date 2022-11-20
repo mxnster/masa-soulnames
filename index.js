@@ -12,9 +12,9 @@ consoleStamp(console, { format: ':date(HH:MM:ss)' });
 const provider = new ethers.providers.JsonRpcProvider(`https://rpc.ankr.com/eth_goerli`);
 const mainWallet = new ethers.Wallet(config.mainWalletPrivateKey, provider);
 const parseFile = fileName => fs.readFileSync(fileName, "utf8").split('\n').map(str => str.trim()).filter(str => str.length > 10);
-const generateRandomNumber = (min, max) => (Math.random() * (max - min) + min).toFixed(0);
+const timeout = ms => new Promise(res => setTimeout(res, ms))
 
-let txMap = new Map();
+let txRetryCountMap = new Map();
 
 function getNewestFile() {
     let files = fs.readdirSync('./');
@@ -25,7 +25,7 @@ async function calcAccountsAmount() {
     let balance = await provider.getBalance(mainWallet.address);
     console.log(`Main account balance: ${ethers.utils.formatUnits(balance)} gETH`);
 
-    return Math.floor(ethers.utils.formatUnits(balance) * 0.9 / config.ethPerWallet)
+    return Math.floor(ethers.utils.formatUnits(balance) * 0.95 / config.ethPerWallet)
 }
 
 async function disperse(walletsArray) {
@@ -36,15 +36,19 @@ async function disperse(walletsArray) {
     let contractSigner = contract.connect(mainWallet);
     let amountArray = Array(walletsArray.length).fill(ethers.utils.parseEther(config.ethPerWallet.toString()))
     let payableAmount = ethers.utils.parseEther((config.ethPerWallet * walletsArray.length).toFixed(3))
-    let gasLimit = (40000 * walletsArray.length).toFixed(0);
+    let gasLimit = (38000 * walletsArray.length).toFixed(0);
+    let feeData = await provider.getFeeData();
 
     let tx = await contractSigner.disperseEther(walletsArray, amountArray, {
         value: payableAmount,
-        gasLimit: +gasLimit
+        gasLimit: +gasLimit,
+        maxFeePerGas: feeData["maxFeePer"],
+        maxPriorityFeePerGas: ethers.utils.parseUnits("2", "gwei")
     }).catch(err => { console.log(`Disperse transaction failed: ${err.message}`) })
 
     if (tx) {
         console.log(`Disperse tx sent: https://goerli.etherscan.io/tx/${tx.hash}`);
+        console.log(`Waiting for tx...`);
         await tx.wait();
         return true
     }
@@ -54,7 +58,7 @@ async function createBatchWallets(amount) {
     let wallets = [];
     let fileName = `privatekeys${Date.now()}.txt`;
 
-    if (amount > 500) amount = 500; // limits max wallets amount
+    if (amount > 300) amount = 300; // limits max wallets amount
     console.log(`Generating ${amount} wallets`);
 
     for (let i = 0; i < amount; i++) {
@@ -67,9 +71,11 @@ async function createBatchWallets(amount) {
 }
 
 async function getRandomAvailableSoulName(masa, min, max) {
+    const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
     while (true) {
         try {
-            let soulName = randomWords({ exactly: 1, maxLength: max })[0] + generateRandomNumber(0, 9)
+            let words = randomWords({ exactly: 2, maxLength: max });
+            let soulName = `${words[0]}${capitalize(words[1])}`
             let isAvailable = await masa.contracts.isAvailable(soulName)
 
             if (soulName.length >= min && isAvailable) {
@@ -87,7 +93,6 @@ async function transferEthToMainWallet(pk) {
         let gasLimit = ethers.BigNumber.from(21000);
         let cost = gasLimit.mul(gasPrice);
         let amountToSend = balance.sub(cost);
-        txMap.set(signer.address, 1);
 
         if (ethers.utils.formatUnits(amountToSend).toString() > 0.001) {
             console.log(`Sending ${ethers.utils.formatUnits(amountToSend)} gETH to main wallet`);
@@ -100,10 +105,11 @@ async function transferEthToMainWallet(pk) {
 
             if (tx) {
                 console.log(`Tx sent: https://goerli.etherscan.io/tx/${tx.hash}`);
-            } else if (txMap.get(signer.address) <= 3) {
-                let attempt = txMap.get(signer.address)
-                console.log(`Retrying transfer, attempt ${attempt}`);
-                txMap.set(signer.address, attempt + 1)
+            } else if (txRetryCountMap.get(signer.address) <= 5) {
+                let attempt = txRetryCountMap.get(signer.address)
+                console.log(`Retrying transfer from ${signer.address}, attempt ${attempt}`);
+                txRetryCountMap.set(signer.address, attempt + 1)
+                await timeout(5000)
                 await transferEthToMainWallet(pk);
             }
         }
@@ -114,36 +120,46 @@ async function authAndMintSoulName(pk, i) {
     let wallet = new ethers.Wallet(pk, provider);
     let masa = new Masa({ wallet })
     console.log(`Wallet [${i + 1}]: ${wallet.address}`)
-    try {
-        let walletSoulName = await masa.contracts.getSoulNames(wallet.address).catch(() => { });
+    txRetryCountMap.set(wallet.address, 1);
+    let attempts = 0;
+    let walletSoulName = await masa.contracts.getSoulNames(wallet.address).catch(() => { });
 
-        if (!walletSoulName) {
-            let data = await masa.client.getChallenge()
-            masa.client.cookie = data.cookie;
+    if (!walletSoulName) {
+        let balance = await provider.getBalance(wallet.address)
 
-            let signature = await wallet.signMessage(Templates.loginTemplate(data.challenge, data.expires));
-            let user = await masa.client.checkSignature(wallet.address, signature)
-            let soulName = await getRandomAvailableSoulName(masa, 3, 6)
-            let soulNameData = await masa.metadata.store(soulName)
+        if (ethers.utils.formatUnits(balance).toString() > 0.01) {
+            while (attempts < 3) {
+                try {
+                    let data = await masa.client.getChallenge()
+                    masa.client.cookie = data.cookie;
 
-            if (soulNameData) {
-                console.log(`Minting soulName: ${soulName}`);
-                let tx = await masa.contracts.purchaseIdentityAndName(wallet, soulName, 'eth', 1, `ar://${soulNameData.metadataTransaction.id}`)
-                await tx.wait()
-                console.log(`Tx mint: https://goerli.etherscan.io/tx/${tx.hash}`);
+                    let signature = await wallet.signMessage(Templates.loginTemplate(data.challenge, data.expires));
+                    let user = await masa.client.checkSignature(wallet.address, signature)
+                    let soulName = await getRandomAvailableSoulName(masa, 2, 8)
+                    let soulNameData = await masa.metadata.store(soulName)
+
+                    if (soulNameData) {
+                        console.log(`Minting soulName: ${soulName}`);
+                        let tx = await masa.contracts.purchaseIdentityAndName(wallet, soulName, 'eth', 1, `ar://${soulNameData.metadataTransaction.id}`)
+                        await tx.wait()
+                        console.log(`Tx mint: https://goerli.etherscan.io/tx/${tx.hash}`);
+                        return true
+                    } else attempts++
+                } catch { error => console.log(`Masa error ${error.message}`) }
             }
-        } else console.log(`This wallet already has a soulName ${walletSoulName[0]}`);
-    } catch { error => console.log(`Masa error ${error.message}`) }
+        } else console.log(`low balance ${wallet.address}`);
+    } else console.log(`This wallet already has a soulName ${walletSoulName[0]}`);
 }
 
 
 
-async function mintAndSend(wallets) {
-    for (let i = 0; i < wallets.length; i++) {
-        await authAndMintSoulName(wallets[i], i)
-        config.transferToMain && await transferEthToMainWallet(wallets[i])
+async function mintAndSend(wallet, i) {
+    try {
+        await authAndMintSoulName(wallet, i)
+        await timeout(1500)
+        config.transferToMain && await transferEthToMainWallet(wallet)
         console.log('-'.repeat(107));
-    }
+    } catch (error) { }
 }
 
 
@@ -155,12 +171,18 @@ async function mintAndSend(wallets) {
 
         if (dispersResult) {
             let wallets = parseFile(walletsData.file, 'utf8');
-            await mintAndSend(wallets)
+
+            for (let i = 0; i < wallets.length; i++) {
+                await mintAndSend(wallets[i], i)
+            }
         }
     } else {
-        console.log('Checking old wallets');
         let file = getNewestFile()
+        console.log(`Checking old wallets from ${file}`);
         let wallets = parseFile(file, 'utf8');
-        await mintAndSend(wallets)
+
+        for (let i = 0; i < wallets.length; i++) {
+            await mintAndSend(wallets[i], i)
+        }
     }
 })()
