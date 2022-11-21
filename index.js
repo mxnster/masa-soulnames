@@ -12,14 +12,10 @@ consoleStamp(console, { format: ':date(HH:MM:ss)' });
 const provider = new ethers.providers.JsonRpcProvider(`https://rpc.ankr.com/eth_goerli`);
 const mainWallet = new ethers.Wallet(config.mainWalletPrivateKey, provider);
 const parseFile = fileName => fs.readFileSync(fileName, "utf8").split('\n').map(str => str.trim()).filter(str => str.length > 10);
+const getNewestFile = () => fs.readdirSync('./').filter(f => f.includes(".txt")).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0]
 const timeout = ms => new Promise(res => setTimeout(res, ms))
-
 let txRetryCountMap = new Map();
 
-function getNewestFile() {
-    let files = fs.readdirSync('./');
-    return files.filter(file => file.includes(".txt")).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0]
-}
 
 async function calcAccountsAmount() {
     let balance = await provider.getBalance(mainWallet.address);
@@ -29,6 +25,7 @@ async function calcAccountsAmount() {
 }
 
 async function disperse(walletsArray) {
+    let pending = await provider.g
     let contract = new ethers.Contract('0xD152f549545093347A162Dce210e7293f1452150', disperseAbi, provider);
     let contractSigner = contract.connect(mainWallet);
     let amountArray = Array(walletsArray.length).fill(ethers.utils.parseEther(config.ethPerWallet.toString()))
@@ -132,7 +129,7 @@ async function authAndMintSoulName(pk, i) {
         let balance = await provider.getBalance(wallet.address)
 
         if (ethers.utils.formatUnits(balance).toString() > 0.01) {
-            while (attempts < 3) {
+            while (attempts <= 3) {
                 try {
                     let data = await masa.client.getChallenge()
                     masa.client.cookie = data.cookie;
@@ -144,18 +141,22 @@ async function authAndMintSoulName(pk, i) {
 
                     if (soulNameData) {
                         console.log(`Minting soulName: ${soulName}`);
+                        attempts++
                         let tx = await masa.contracts.purchaseIdentityAndName(wallet, soulName, 'eth', 1, `ar://${soulNameData.metadataTransaction.id}`)
+                            .catch(async err => {
+                                console.log('Mint Error:', err?.reason)
+                                await timeout(10000)
+                            })
+
                         await tx.wait()
                         console.log(`Tx mint: https://goerli.etherscan.io/tx/${tx.hash}`);
                         return true
-                    } else attempts++
+                    }
                 } catch { error => console.log(`Masa error ${error.message}`) }
             }
         } else console.log(`low balance ${wallet.address}`);
     } else console.log(`This wallet already has a soulName ${walletSoulName[0]}`);
 }
-
-
 
 async function mintAndSend(wallet, i) {
     try {

@@ -15,7 +15,7 @@ index 4e50e80..af5cdfd 100644
              yield this.checkOrGiveAllowance(paymentAddress, signer, paymentMethod, prices);
              const tx = yield this.identity.SoulStoreContract.connect(signer).purchaseIdentityAndName(paymentAddress, name, duration, metadataURL, {
                  value: paymentMethod === "eth" ? prices.priceInETH : undefined,
-+                gasLimit: 650000
++                gasLimit: 630000
              });
              return tx;
          });
