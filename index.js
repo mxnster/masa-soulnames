@@ -3,8 +3,8 @@ import pkg from '@masa-finance/masa-sdk';
 import consoleStamp from 'console-stamp';
 import randomWords from "random-words";
 import fs from 'fs';
-import axios from 'axios';
 import { config } from "./config.js"
+import { disperseAbi } from "./disperseAbi.js"
 
 const { Masa, Templates } = pkg;
 consoleStamp(console, { format: ':date(HH:MM:ss)' });
@@ -29,27 +29,26 @@ async function calcAccountsAmount() {
 }
 
 async function disperse(walletsArray) {
-    let contractAddress = `0xD152f549545093347A162Dce210e7293f1452150`
-    let res = await axios.get(`https://api-goerli.etherscan.io/api?module=contract&action=getabi&address=${contractAddress}`).catch(() => { })
-    let abi = res.data.result;
-    let contract = new ethers.Contract(contractAddress, abi, provider);
+    let contract = new ethers.Contract('0xD152f549545093347A162Dce210e7293f1452150', disperseAbi, provider);
     let contractSigner = contract.connect(mainWallet);
     let amountArray = Array(walletsArray.length).fill(ethers.utils.parseEther(config.ethPerWallet.toString()))
     let payableAmount = ethers.utils.parseEther((config.ethPerWallet * walletsArray.length).toFixed(3))
-    let gasLimit = (38000 * walletsArray.length).toFixed(0);
+    let gasLimit = (40000 * walletsArray.length).toFixed(0);
     let feeData = await provider.getFeeData();
 
     let tx = await contractSigner.disperseEther(walletsArray, amountArray, {
         value: payableAmount,
         gasLimit: +gasLimit,
         maxFeePerGas: feeData["maxFeePer"],
-        maxPriorityFeePerGas: ethers.utils.parseUnits("2", "gwei")
+        maxPriorityFeePerGas: feeData["maxPriorityFeePerGas"],
+        nonce: await provider.getTransactionCount(mainWallet.address),
     }).catch(err => { console.log(`Disperse transaction failed: ${err.message}`) })
 
     if (tx) {
         console.log(`Disperse tx sent: https://goerli.etherscan.io/tx/${tx.hash}`);
         console.log(`Waiting for tx...`);
         await tx.wait();
+
         return true
     }
 }
@@ -93,6 +92,7 @@ async function transferEthToMainWallet(pk) {
         let gasLimit = ethers.BigNumber.from(21000);
         let cost = gasLimit.mul(gasPrice);
         let amountToSend = balance.sub(cost);
+        let feeData = await provider.getFeeData();
 
         if (ethers.utils.formatUnits(amountToSend).toString() > 0.001) {
             console.log(`Sending ${ethers.utils.formatUnits(amountToSend)} gETH to main wallet`);
@@ -100,7 +100,11 @@ async function transferEthToMainWallet(pk) {
             const tx = await signer.sendTransaction({
                 to: mainWallet.address,
                 value: amountToSend,
-                gasLimit: 21000
+                gasLimit: 21000,
+                maxFeePerGas: feeData["maxFeePer"],
+                maxPriorityFeePerGas: feeData["maxPriorityFeePerGas"],
+                nonce: await provider.getTransactionCount(signer.address),
+                chainId: 5
             }).catch(err => console.log(`Transfer failed`))
 
             if (tx) {
