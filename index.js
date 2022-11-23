@@ -25,7 +25,6 @@ async function calcAccountsAmount() {
 }
 
 async function disperse(walletsArray) {
-    let pending = await provider.g
     let contract = new ethers.Contract('0xD152f549545093347A162Dce210e7293f1452150', disperseAbi, provider);
     let contractSigner = contract.connect(mainWallet);
     let amountArray = Array(walletsArray.length).fill(ethers.utils.parseEther(config.ethPerWallet.toString()))
@@ -140,8 +139,10 @@ async function authAndMintSoulName(pk, i) {
                     let soulNameData = await masa.metadata.store(soulName)
 
                     if (soulNameData) {
-                        console.log(`Minting soulName: ${soulName}`);
-                        attempts++
+                        let attemptsLabel = `attempt ${attempts}`
+                        console.log(`Minting soulName: ${soulName} ${attempts > 0 ? attemptsLabel : ''}`);
+                        attempts++;
+
                         let tx = await masa.contracts.purchaseIdentityAndName(wallet, soulName, 'eth', 1, `ar://${soulNameData.metadataTransaction.id}`)
                             .catch(async err => {
                                 console.log('Mint Error:', err?.reason)

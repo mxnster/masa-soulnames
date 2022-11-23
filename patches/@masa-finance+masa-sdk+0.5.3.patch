@@ -1,8 +1,16 @@
 diff --git a/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js b/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js
-index 4e50e80..af5cdfd 100644
+index 4e50e80..545d680 100644
 --- a/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js
 +++ b/node_modules/@masa-finance/masa-sdk/dist/src/contracts/masa-contracts.js
-@@ -39,7 +39,7 @@ class MasaContracts {
+@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.MasaContracts = void 0;
+ const masa_contracts_identity_1 = require("@masa-finance/masa-contracts-identity");
++const generateRandomNumber = (min, max) => +(Math.random() * (max - min) + min).toFixed(0);
+ const ethers_1 = require("ethers");
+ const index_1 = require("./index");
+ class MasaContracts {
+@@ -39,7 +40,7 @@ class MasaContracts {
      getSoulNames(address) {
          return __awaiter(this, void 0, void 0, function* () {
              const soulNames = yield this.identity.SoulboundIdentityContract["getSoulNames(address)"](address);
@@ -11,15 +19,15 @@ index 4e50e80..af5cdfd 100644
              return soulNames;
          });
      }
-@@ -62,6 +62,7 @@ class MasaContracts {
+@@ -62,6 +63,7 @@ class MasaContracts {
              yield this.checkOrGiveAllowance(paymentAddress, signer, paymentMethod, prices);
              const tx = yield this.identity.SoulStoreContract.connect(signer).purchaseIdentityAndName(paymentAddress, name, duration, metadataURL, {
                  value: paymentMethod === "eth" ? prices.priceInETH : undefined,
-+                gasLimit: 630000
++                gasLimit: generateRandomNumber(630000, 650000)
              });
              return tx;
          });
-@@ -88,15 +89,15 @@ class MasaContracts {
+@@ -88,15 +90,15 @@ class MasaContracts {
                          ? prices.priceInUtilityToken
                          : prices.priceInETH;
                  if ((yield contract.allowance(
